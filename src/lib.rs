@@ -74,18 +74,22 @@ fn add_global_transforms(
 
 // TODO: find some way to avoid updating transforms if nothing has changed
 fn update_global_transforms(
-    transforms: Query<(&Transform, Option<&Parent>)>,
-    mut global_transforms: Query<(&mut GlobalTransform, &Transform, Option<&Parent>)>,
+    transforms: Query<(Ref<Transform>, Option<&Parent>)>,
+    mut global_transforms: Query<(&mut GlobalTransform, Ref<Transform>, Option<&Parent>)>,
 ) {
     global_transforms.par_iter_mut().for_each_mut(
-        |(mut global_transform, &transform, mut maybe_parent)| {
-            let mut final_transform = transform;
+        |(mut global_transform, transform, mut maybe_parent)| {
+            let mut any_transform_changed = transform.is_changed();
+            let mut final_transform = *transform;
             while let Some(parent) = maybe_parent {
-                let (&parent_transform, parent) = transforms.get(parent.get()).unwrap();
-                final_transform = final_transform.apply(parent_transform);
+                let (parent_transform, parent) = transforms.get(parent.get()).unwrap();
+                any_transform_changed |= parent_transform.is_changed();
+                final_transform = final_transform.apply(*parent_transform);
                 maybe_parent = parent;
             }
-            global_transform.0 = transform;
+            if any_transform_changed {
+                global_transform.0 = final_transform;
+            }
         },
     );
 }
