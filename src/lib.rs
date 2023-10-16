@@ -61,7 +61,9 @@ fn add_global_transforms(
     for (entity, &transform, mut maybe_parent) in &transforms {
         let mut final_transform = transform;
         while let Some(parent) = maybe_parent {
-            let (_, &parent_transform, parent) = transforms.get(parent.get()).unwrap();
+            let Ok((_, &parent_transform, parent)) = transforms.get(parent.get()) else {
+                break;
+            };
             final_transform = final_transform.apply(parent_transform);
             maybe_parent = parent;
         }
@@ -82,7 +84,9 @@ fn update_global_transforms(
             let mut any_transform_changed = transform.is_changed();
             let mut final_transform = *transform;
             while let Some(parent) = maybe_parent {
-                let (parent_transform, parent) = transforms.get(parent.get()).unwrap();
+                let Ok((parent_transform, parent)) = transforms.get(parent.get()) else {
+                    break;
+                };
                 any_transform_changed |= parent_transform.is_changed();
                 final_transform = final_transform.apply(*parent_transform);
                 maybe_parent = parent;
