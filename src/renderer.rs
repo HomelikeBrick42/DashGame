@@ -174,6 +174,7 @@ fn update_camera(renderer: Res<Renderer>, camera: Query<(Ref<GlobalTransform>, R
     let mut buffer = UniformBuffer::new([0u8; GpuCamera::SHADER_SIZE.get() as _]);
     buffer.write(&gpu_camera).unwrap();
     let buffer = buffer.into_inner();
+
     renderer
         .queue
         .write_buffer(&renderer.camera_uniform_buffer, 0, &buffer);
