@@ -5,7 +5,8 @@ use crate::{
 use bevy::{
     ecs::schedule::ScheduleLabel,
     prelude::{
-        resource_changed, App, Changed, IntoSystemConfigs, Or, Plugin, Query, Res, ResMut, Resource,
+        resource_changed, App, DetectChanges, IntoSystemConfigs, Plugin, Query, Ref, Res, ResMut,
+        Resource,
     },
 };
 use encase::{ShaderSize, ShaderType, UniformBuffer};
@@ -155,13 +156,13 @@ fn on_resize(mut renderer: ResMut<Renderer>, size: Res<WindowSize>) {
         .configure(&renderer.device, &renderer.surface_configuration);
 }
 
-fn update_camera(
-    renderer: ResMut<Renderer>,
-    camera: Query<(&GlobalTransform, &Camera), Or<(Changed<GlobalTransform>, Changed<Camera>)>>,
-) {
+fn update_camera(renderer: Res<Renderer>, camera: Query<(Ref<GlobalTransform>, Ref<Camera>)>) {
     let (global_transform, camera) = camera.get_single().unwrap();
-    let transform = global_transform.transform();
+    if !global_transform.is_changed() && !camera.is_changed() {
+        return;
+    }
 
+    let transform = global_transform.transform();
     let gpu_camera = GpuCamera {
         x: transform.x,
         y: transform.y,
