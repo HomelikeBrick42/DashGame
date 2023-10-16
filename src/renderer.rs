@@ -1,6 +1,6 @@
 use crate::{
     window::{InitWindowInternals, WindowSize},
-    {Camera, GlobalTransform},
+    Quad, {Camera, GlobalTransform},
 };
 use bevy::{
     ecs::schedule::ScheduleLabel,
@@ -15,11 +15,29 @@ use encase::{ShaderSize, ShaderType, UniformBuffer};
 pub struct RenderSchedule;
 
 #[derive(ShaderType)]
-struct GpuCamera {
+struct GpuTransform {
     x: f32,
     y: f32,
+}
+
+#[derive(ShaderType)]
+struct GpuCamera {
+    transform: GpuTransform,
     aspect: f32,
     vertical_height: f32,
+}
+
+#[derive(ShaderType)]
+struct GpuQuad {
+    transform: GpuTransform,
+    width: f32,
+    height: f32,
+}
+
+#[derive(ShaderType)]
+struct GpuQuads<'a> {
+    #[size(runtime)]
+    quads: &'a [GpuQuad],
 }
 
 #[derive(Resource)]
@@ -140,6 +158,7 @@ impl Plugin for RendererPlugin {
                 (
                     on_resize.run_if(resource_changed::<WindowSize>()),
                     update_camera,
+                    update_quads,
                 ),
                 render,
             )
@@ -164,8 +183,10 @@ fn update_camera(renderer: Res<Renderer>, camera: Query<(Ref<GlobalTransform>, R
 
     let transform = global_transform.transform();
     let gpu_camera = GpuCamera {
-        x: transform.x,
-        y: transform.y,
+        transform: GpuTransform {
+            x: transform.x,
+            y: transform.y,
+        },
         aspect: renderer.surface_configuration.width as f32
             / renderer.surface_configuration.height as f32,
         vertical_height: camera.vertical_height,
@@ -178,6 +199,24 @@ fn update_camera(renderer: Res<Renderer>, camera: Query<(Ref<GlobalTransform>, R
     renderer
         .queue
         .write_buffer(&renderer.camera_uniform_buffer, 0, &buffer);
+}
+
+// TODO: find a way to only upload new quads
+fn update_quads(mut _renderer: ResMut<Renderer>, quads: Query<(Ref<GlobalTransform>, Ref<Quad>)>) {
+    let _gpu_quads = quads
+        .into_iter()
+        .map(|(global_transform, quad)| {
+            let transform = global_transform.transform();
+            GpuQuad {
+                transform: GpuTransform {
+                    x: transform.x,
+                    y: transform.y,
+                },
+                width: quad.width,
+                height: quad.height,
+            }
+        })
+        .collect::<Vec<_>>();
 }
 
 fn render(renderer: ResMut<Renderer>) {
