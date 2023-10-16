@@ -7,7 +7,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-#[derive(Resource)]
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WindowSize {
     width: NonZeroUsize,
     height: NonZeroUsize,
