@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = { version = "0.11.3", default-features = false }
+encase = "0.6.1"
 pollster = "0.3.0"
 wgpu = "0.17.1"
 winit = "0.28.7"
