@@ -15,21 +15,17 @@ use encase::{ShaderSize, ShaderType, UniformBuffer};
 pub struct RenderSchedule;
 
 #[derive(ShaderType)]
-struct GpuTransform {
+struct GpuCamera {
     x: f32,
     y: f32,
-}
-
-#[derive(ShaderType)]
-struct GpuCamera {
-    transform: GpuTransform,
     aspect: f32,
     vertical_height: f32,
 }
 
 #[derive(ShaderType)]
 struct GpuQuad {
-    transform: GpuTransform,
+    x: f32,
+    y: f32,
     width: f32,
     height: f32,
 }
@@ -183,10 +179,8 @@ fn update_camera(renderer: Res<Renderer>, camera: Query<(Ref<GlobalTransform>, R
 
     let transform = global_transform.transform();
     let gpu_camera = GpuCamera {
-        transform: GpuTransform {
-            x: transform.x,
-            y: transform.y,
-        },
+        x: transform.x,
+        y: transform.y,
         aspect: renderer.surface_configuration.width as f32
             / renderer.surface_configuration.height as f32,
         vertical_height: camera.vertical_height,
@@ -208,10 +202,8 @@ fn update_quads(mut _renderer: ResMut<Renderer>, quads: Query<(Ref<GlobalTransfo
         .map(|(global_transform, quad)| {
             let transform = global_transform.transform();
             GpuQuad {
-                transform: GpuTransform {
-                    x: transform.x,
-                    y: transform.y,
-                },
+                x: transform.x,
+                y: transform.y,
                 width: quad.width,
                 height: quad.height,
             }
