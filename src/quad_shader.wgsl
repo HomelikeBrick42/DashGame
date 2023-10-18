@@ -49,7 +49,7 @@ fn vertex(in: VertexInput) -> VertexOutput {
     vertex_coord.x += quads[in.quad_index].x;
     vertex_coord.y += quads[in.quad_index].y;
 
-    out.clip_position = vec4<f32>((vertex_coord - vec2<f32>(camera.x, camera.y)) * camera.vertical_height / vec2<f32>(camera.aspect, 1.0), 0.0, 1.0);
+    out.clip_position = vec4<f32>((vertex_coord - vec2<f32>(camera.x, camera.y)) / camera.vertical_height * 2.0 / vec2<f32>(camera.aspect, 1.0), 0.0, 1.0);
 
     return out;
 }

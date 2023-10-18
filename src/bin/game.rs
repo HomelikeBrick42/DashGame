@@ -12,7 +12,7 @@ fn startup(mut commands: Commands) {
     let _camera = commands.spawn((
         Transform { x: 0.0, y: 0.0 },
         Camera {
-            vertical_height: 1.0,
+            vertical_height: 2.0,
         },
     ));
     let _quad = commands.spawn((
