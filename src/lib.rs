@@ -49,7 +49,12 @@ impl Plugin for TransformPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             PostUpdate,
-            (update_global_transforms, add_global_transforms).chain(),
+            (
+                remove_global_transforms,
+                update_global_transforms,
+                add_global_transforms,
+            )
+                .chain(),
         );
     }
 }
@@ -71,6 +76,18 @@ fn add_global_transforms(
             .get_entity(entity)
             .unwrap()
             .insert(GlobalTransform(transform));
+    }
+}
+
+fn remove_global_transforms(
+    mut commands: Commands,
+    global_transforms_without_transform: Query<Entity, (With<GlobalTransform>, Without<Transform>)>,
+) {
+    for entity in &global_transforms_without_transform {
+        commands
+            .get_entity(entity)
+            .unwrap()
+            .remove::<GlobalTransform>();
     }
 }
 
@@ -102,6 +119,11 @@ fn update_global_transforms(
 pub struct Quad {
     pub width: f32,
     pub height: f32,
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct Circle {
+    pub radius: f32,
 }
 
 #[derive(Component, Clone, Copy)]
