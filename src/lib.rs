@@ -105,6 +105,13 @@ pub struct Quad {
 }
 
 #[derive(Component, Clone, Copy)]
+pub struct Material {
+    pub red: f32,
+    pub green: f32,
+    pub blue: f32,
+}
+
+#[derive(Component, Clone, Copy)]
 pub struct Camera {
     pub vertical_height: f32,
 }

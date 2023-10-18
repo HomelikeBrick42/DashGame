@@ -1,6 +1,6 @@
 use crate::{
     window::{InitWindowInternals, WindowSize},
-    Quad, {Camera, GlobalTransform},
+    Material, Quad, {Camera, GlobalTransform},
 };
 use bevy::{
     ecs::schedule::ScheduleLabel,
@@ -9,7 +9,8 @@ use bevy::{
         Resource,
     },
 };
-use encase::{ShaderSize, ShaderType, UniformBuffer};
+use encase::{DynamicStorageBuffer, ShaderSize, ShaderType, UniformBuffer};
+use wgpu::include_wgsl;
 
 #[derive(ScheduleLabel, Debug, PartialEq, Eq, Clone, Hash)]
 pub struct RenderSchedule;
@@ -28,16 +29,19 @@ struct GpuQuad {
     y: f32,
     width: f32,
     height: f32,
-}
-
-#[derive(ShaderType)]
-struct GpuQuads<'a> {
-    #[size(runtime)]
-    quads: &'a [GpuQuad],
+    red: f32,
+    green: f32,
+    blue: f32,
 }
 
 #[derive(Resource)]
 struct Renderer {
+    quad_render_pipeline: wgpu::RenderPipeline,
+    quad_buffer: wgpu::Buffer,
+    quad_buffer_size: wgpu::BufferAddress,
+    quad_count: u32,
+    quad_bind_group_layout: wgpu::BindGroupLayout,
+    quad_bind_group: wgpu::BindGroup,
     camera_uniform_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     queue: wgpu::Queue,
@@ -137,7 +141,83 @@ impl Plugin for RendererPlugin {
             }],
         });
 
+        let quad_buffer_size = GpuQuad::SHADER_SIZE;
+        let quad_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Quad Storage Buffer"),
+            size: quad_buffer_size.get(),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let quad_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Quad Bind Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(quad_buffer_size),
+                    },
+                    count: None,
+                }],
+            });
+        let quad_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Quad Bind Group"),
+            layout: &quad_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: quad_buffer.as_entire_binding(),
+            }],
+        });
+
+        let quad_shader = device.create_shader_module(include_wgsl!("./quad_shader.wgsl"));
+
+        let quad_render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Quad Render Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout, &quad_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+        let quad_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Quad Render Pipeline"),
+            layout: Some(&quad_render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &quad_shader,
+                entry_point: "vertex",
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Cw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &quad_shader,
+                entry_point: "pixel",
+                targets: &[Some(surface_configuration.format.into())],
+            }),
+            multiview: None,
+        });
+
         app.insert_resource(Renderer {
+            quad_render_pipeline,
+            quad_buffer,
+            quad_buffer_size: quad_buffer_size.get(),
+            quad_count: 0,
+            quad_bind_group,
+            quad_bind_group_layout,
             camera_uniform_buffer,
             camera_bind_group,
             queue,
@@ -171,9 +251,13 @@ fn on_resize(mut renderer: ResMut<Renderer>, size: Res<WindowSize>) {
         .configure(&renderer.device, &renderer.surface_configuration);
 }
 
-fn update_camera(renderer: Res<Renderer>, camera: Query<(Ref<GlobalTransform>, Ref<Camera>)>) {
+fn update_camera(
+    renderer: Res<Renderer>,
+    camera: Query<(Ref<GlobalTransform>, Ref<Camera>)>,
+    size: Res<WindowSize>,
+) {
     let (global_transform, camera) = camera.get_single().unwrap();
-    if !global_transform.is_changed() && !camera.is_changed() {
+    if !global_transform.is_changed() && !camera.is_changed() && !size.is_changed() {
         return;
     }
 
@@ -181,8 +265,7 @@ fn update_camera(renderer: Res<Renderer>, camera: Query<(Ref<GlobalTransform>, R
     let gpu_camera = GpuCamera {
         x: transform.x,
         y: transform.y,
-        aspect: renderer.surface_configuration.width as f32
-            / renderer.surface_configuration.height as f32,
+        aspect: size.width().get() as f32 / size.height().get() as f32,
         vertical_height: camera.vertical_height,
     };
 
@@ -195,20 +278,67 @@ fn update_camera(renderer: Res<Renderer>, camera: Query<(Ref<GlobalTransform>, R
         .write_buffer(&renderer.camera_uniform_buffer, 0, &buffer);
 }
 
-// TODO: find a way to only upload new quads
-fn update_quads(mut _renderer: ResMut<Renderer>, quads: Query<(Ref<GlobalTransform>, Ref<Quad>)>) {
-    let _gpu_quads = quads
-        .into_iter()
-        .map(|(global_transform, quad)| {
-            let transform = global_transform.transform();
-            GpuQuad {
+// TODO: find a way to only upload changed quads
+fn update_quads(
+    mut renderer: ResMut<Renderer>,
+    quads: Query<(Ref<GlobalTransform>, Ref<Quad>, Option<Ref<Material>>)>,
+) {
+    let mut anything_changed = false;
+    let mut quad_count = 0usize;
+    let mut buffer = DynamicStorageBuffer::new(vec![]);
+    for (global_transform, quad, material) in &quads {
+        quad_count += 1;
+        anything_changed |= global_transform.is_changed() || quad.is_changed();
+        let transform = global_transform.transform();
+        let (red, green, blue) = material.map_or((1.0, 1.0, 1.0), |material| {
+            anything_changed |= material.is_changed();
+            let Material { red, green, blue } = *material;
+            (red, green, blue)
+        });
+        buffer
+            .write(&GpuQuad {
                 x: transform.x,
                 y: transform.y,
                 width: quad.width,
                 height: quad.height,
-            }
-        })
-        .collect::<Vec<_>>();
+                red,
+                green,
+                blue,
+            })
+            .unwrap();
+    }
+
+    let quad_count = quad_count.try_into().unwrap();
+    if anything_changed || quad_count != renderer.quad_count {
+        renderer.quad_count = quad_count;
+        let buffer = buffer.into_inner();
+
+        let required_buffer_size: wgpu::BufferAddress = buffer.len().try_into().unwrap();
+        if required_buffer_size > renderer.quad_buffer_size {
+            renderer.quad_buffer_size = required_buffer_size;
+            renderer.quad_buffer = renderer.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Quad Storage Buffer"),
+                size: renderer.quad_buffer_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            });
+            renderer.quad_bind_group =
+                renderer
+                    .device
+                    .create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Quad Bind Group"),
+                        layout: &renderer.quad_bind_group_layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: renderer.quad_buffer.as_entire_binding(),
+                        }],
+                    });
+        }
+
+        renderer
+            .queue
+            .write_buffer(&renderer.quad_buffer, 0, &buffer);
+    }
 }
 
 fn render(renderer: ResMut<Renderer>) {
@@ -254,8 +384,10 @@ fn render(renderer: ResMut<Renderer>) {
             depth_stencil_attachment: None,
         });
 
-        // TODO: pipelines
+        render_pass.set_pipeline(&renderer.quad_render_pipeline);
         render_pass.set_bind_group(0, &renderer.camera_bind_group, &[]);
+        render_pass.set_bind_group(1, &renderer.quad_bind_group, &[]);
+        render_pass.draw(0..4, 0..renderer.quad_count);
     }
     renderer.queue.submit([encoder.finish()]);
 
