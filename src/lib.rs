@@ -1,5 +1,6 @@
 #![allow(clippy::type_complexity)]
 
+pub mod multivector;
 pub mod renderer;
 pub mod window;
 
