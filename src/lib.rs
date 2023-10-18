@@ -26,6 +26,7 @@ pub struct Transform {
 }
 
 impl Transform {
+    #[inline]
     pub fn apply(self, other: Transform) -> Transform {
         Transform {
             x: self.x + other.x,
@@ -38,6 +39,7 @@ impl Transform {
 pub struct GlobalTransform(pub(crate) Transform);
 
 impl GlobalTransform {
+    #[inline]
     pub fn transform(&self) -> &Transform {
         &self.0
     }
