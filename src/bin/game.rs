@@ -1,3 +1,5 @@
+#![deny(rust_2018_idioms)]
+
 use bevy::prelude::{App, Commands, EventReader, Query, Res, Startup, Update};
 use dash_game::{
     window::{MouseButton, MouseButtons, MouseMovement, MouseScroll, WindowSize},
@@ -12,7 +14,7 @@ fn main() {
         .run();
 }
 
-fn startup(mut commands: Commands) {
+fn startup(mut commands: Commands<'_, '_>) {
     let _camera = commands.spawn((
         Transform { x: 0.0, y: 0.0 },
         Camera {
@@ -43,10 +45,10 @@ fn startup(mut commands: Commands) {
 }
 
 fn camera_mouse_movement(
-    mut camera: Query<(&mut Transform, &Camera)>,
-    mut mouse_movement_events: EventReader<MouseMovement>,
-    size: Res<WindowSize>,
-    mouse_buttons: Res<MouseButtons>,
+    mut camera: Query<'_, '_, (&mut Transform, &Camera)>,
+    mut mouse_movement_events: EventReader<'_, '_, MouseMovement>,
+    size: Res<'_, WindowSize>,
+    mouse_buttons: Res<'_, MouseButtons>,
 ) {
     let (mut camera_transform, camera) = camera.get_single_mut().unwrap();
     let aspect = size.width().get() as f32 / size.height().get() as f32;
@@ -61,7 +63,10 @@ fn camera_mouse_movement(
     }
 }
 
-fn camera_zoom(mut camera: Query<&mut Camera>, mut mouse_scroll_events: EventReader<MouseScroll>) {
+fn camera_zoom(
+    mut camera: Query<'_, '_, &mut Camera>,
+    mut mouse_scroll_events: EventReader<'_, '_, MouseScroll>,
+) {
     let mut camera = camera.get_single_mut().unwrap();
     for mouse_scroll_event in mouse_scroll_events.iter() {
         match mouse_scroll_event {

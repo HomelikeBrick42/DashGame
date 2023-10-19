@@ -337,7 +337,7 @@ impl Plugin for RendererPlugin {
     }
 }
 
-fn on_resize(mut renderer: ResMut<Renderer>, size: Res<WindowSize>) {
+fn on_resize(mut renderer: ResMut<'_, Renderer>, size: Res<'_, WindowSize>) {
     renderer.surface_configuration.width = size.width().get().try_into().unwrap();
     renderer.surface_configuration.height = size.height().get().try_into().unwrap();
     renderer
@@ -346,9 +346,9 @@ fn on_resize(mut renderer: ResMut<Renderer>, size: Res<WindowSize>) {
 }
 
 fn update_camera(
-    renderer: Res<Renderer>,
-    camera: Query<(Ref<GlobalTransform>, Ref<Camera>)>,
-    size: Res<WindowSize>,
+    renderer: Res<'_, Renderer>,
+    camera: Query<'_, '_, (Ref<'_, GlobalTransform>, Ref<'_, Camera>)>,
+    size: Res<'_, WindowSize>,
 ) {
     let (global_transform, camera) = camera.get_single().unwrap();
     if !global_transform.is_changed() && !camera.is_changed() && !size.is_changed() {
@@ -374,8 +374,16 @@ fn update_camera(
 
 // TODO: find a way to only upload changed quads
 fn update_quads(
-    mut renderer: ResMut<Renderer>,
-    quads: Query<(Ref<GlobalTransform>, Ref<Quad>, Option<Ref<Material>>)>,
+    mut renderer: ResMut<'_, Renderer>,
+    quads: Query<
+        '_,
+        '_,
+        (
+            Ref<'_, GlobalTransform>,
+            Ref<'_, Quad>,
+            Option<Ref<'_, Material>>,
+        ),
+    >,
 ) {
     let mut anything_changed = false;
     let mut quad_count = 0usize;
@@ -437,8 +445,16 @@ fn update_quads(
 
 // TODO: find a way to only upload changed circles
 fn update_circles(
-    mut renderer: ResMut<Renderer>,
-    circles: Query<(Ref<GlobalTransform>, Ref<Circle>, Option<Ref<Material>>)>,
+    mut renderer: ResMut<'_, Renderer>,
+    circles: Query<
+        '_,
+        '_,
+        (
+            Ref<'_, GlobalTransform>,
+            Ref<'_, Circle>,
+            Option<Ref<'_, Material>>,
+        ),
+    >,
 ) {
     let mut anything_changed = false;
     let mut circle_count = 0usize;
@@ -497,7 +513,7 @@ fn update_circles(
     }
 }
 
-fn render(renderer: ResMut<Renderer>) {
+fn render(renderer: ResMut<'_, Renderer>) {
     let output = loop {
         match renderer.surface.get_current_texture() {
             Ok(output) => break output,

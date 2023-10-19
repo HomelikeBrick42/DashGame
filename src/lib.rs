@@ -1,4 +1,5 @@
 #![allow(clippy::type_complexity)]
+#![deny(rust_2018_idioms)]
 
 pub mod multivector;
 pub mod renderer;
@@ -63,8 +64,8 @@ impl Plugin for TransformPlugin {
 }
 
 fn add_global_transforms(
-    mut commands: Commands,
-    transforms: Query<(Entity, &Transform, Option<&Parent>), Without<GlobalTransform>>,
+    mut commands: Commands<'_, '_>,
+    transforms: Query<'_, '_, (Entity, &Transform, Option<&Parent>), Without<GlobalTransform>>,
 ) {
     for (entity, &transform, mut maybe_parent) in &transforms {
         let mut final_transform = transform;
@@ -83,8 +84,13 @@ fn add_global_transforms(
 }
 
 fn remove_global_transforms(
-    mut commands: Commands,
-    global_transforms_without_transform: Query<Entity, (With<GlobalTransform>, Without<Transform>)>,
+    mut commands: Commands<'_, '_>,
+    global_transforms_without_transform: Query<
+        '_,
+        '_,
+        Entity,
+        (With<GlobalTransform>, Without<Transform>),
+    >,
 ) {
     for entity in &global_transforms_without_transform {
         commands
@@ -96,8 +102,8 @@ fn remove_global_transforms(
 
 // TODO: find some way to avoid updating transforms if nothing has changed
 fn update_global_transforms(
-    transforms: Query<(Ref<Transform>, Option<&Parent>)>,
-    mut global_transforms: Query<(&mut GlobalTransform, Ref<Transform>, Option<&Parent>)>,
+    transforms: Query<'_, '_, (Ref<'_, Transform>, Option<&Parent>)>,
+    mut global_transforms: Query<'_, '_, (&mut GlobalTransform, Ref<'_, Transform>, Option<&Parent>)>,
 ) {
     global_transforms.par_iter_mut().for_each_mut(
         |(mut global_transform, transform, mut maybe_parent)| {
