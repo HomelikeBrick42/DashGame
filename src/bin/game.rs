@@ -1,4 +1,4 @@
-use bevy::prelude::{App, Commands, EventReader, Query, Res, Startup, Update, With};
+use bevy::prelude::{App, Commands, EventReader, Query, Res, Startup, Update};
 use dash_game::{
     window::{MouseButton, MouseButtons, MouseMovement, WindowSize},
     Camera, Circle, GamePlugins, Material, Quad, Transform,
@@ -43,18 +43,20 @@ fn startup(mut commands: Commands) {
 }
 
 fn mouse_movement(
-    mut camera: Query<&mut Transform, With<Camera>>,
+    mut camera: Query<(&mut Transform, &Camera)>,
     mut mouse_movement_events: EventReader<MouseMovement>,
     size: Res<WindowSize>,
     mouse_buttons: Res<MouseButtons>,
 ) {
-    let mut camera_transform = camera.get_single_mut().unwrap();
+    let (mut camera_transform, camera) = camera.get_single_mut().unwrap();
     let aspect = size.width().get() as f32 / size.height().get() as f32;
     for mouse_movement in mouse_movement_events.iter() {
         if mouse_buttons.is_button_down(MouseButton::Right) {
-            camera_transform.x +=
-                -mouse_movement.delta_x as f32 / size.width().get() as f32 * aspect * 2.0;
-            camera_transform.y += mouse_movement.delta_y as f32 / size.height().get() as f32 * 2.0;
+            camera_transform.x += -mouse_movement.delta_x as f32 / size.width().get() as f32
+                * camera.vertical_height
+                * aspect;
+            camera_transform.y +=
+                mouse_movement.delta_y as f32 / size.height().get() as f32 * camera.vertical_height;
         }
     }
 }
