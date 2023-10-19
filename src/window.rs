@@ -1,9 +1,9 @@
 use crate::renderer::RenderSchedule;
 use bevy::prelude::*;
 use enum_map::{Enum, EnumMap};
-use std::num::NonZeroUsize;
+use std::{cmp::Ordering, num::NonZeroUsize};
 use winit::{
-    event::{ElementState, Event, WindowEvent},
+    event::{ElementState, Event, MouseScrollDelta, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
@@ -80,6 +80,12 @@ pub struct MouseMovement {
     pub delta_y: f64,
 }
 
+#[derive(Event, Debug, Clone, Copy)]
+pub enum MouseScroll {
+    Up,
+    Down,
+}
+
 pub(crate) struct InitWindowInternals {
     pub(crate) window: Window,
     event_loop: EventLoop<()>,
@@ -109,6 +115,22 @@ impl WindowPlugin {
                         }
                         WindowEvent::Destroyed | WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::Exit;
+                        }
+                        WindowEvent::MouseWheel {
+                            device_id: _,
+                            delta,
+                            phase: _,
+                            ..
+                        } => {
+                            let y = match delta {
+                                MouseScrollDelta::LineDelta(_, y) => y,
+                                MouseScrollDelta::PixelDelta(delta) => delta.y as f32,
+                            };
+                            match y.partial_cmp(&0.0) {
+                                Some(Ordering::Less) => app.world.send_event(MouseScroll::Down),
+                                Some(Ordering::Greater) => app.world.send_event(MouseScroll::Up),
+                                None | Some(Ordering::Equal) => {}
+                            }
                         }
                         WindowEvent::CursorLeft { device_id: _ } => {
                             last_mouse_position = None;
@@ -206,6 +228,7 @@ impl Plugin for WindowPlugin {
                 released_buttons: EnumMap::default(),
             })
             .add_event::<MouseMovement>()
+            .add_event::<MouseScroll>()
             .set_runner(Self::runner);
     }
 }

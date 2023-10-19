@@ -1,6 +1,6 @@
 use bevy::prelude::{App, Commands, EventReader, Query, Res, Startup, Update};
 use dash_game::{
-    window::{MouseButton, MouseButtons, MouseMovement, WindowSize},
+    window::{MouseButton, MouseButtons, MouseMovement, MouseScroll, WindowSize},
     Camera, Circle, GamePlugins, Material, Quad, Transform,
 };
 
@@ -8,7 +8,7 @@ fn main() {
     App::new()
         .add_plugins(GamePlugins)
         .add_systems(Startup, startup)
-        .add_systems(Update, mouse_movement)
+        .add_systems(Update, (camera_mouse_movement, camera_zoom))
         .run();
 }
 
@@ -42,7 +42,7 @@ fn startup(mut commands: Commands) {
     ));
 }
 
-fn mouse_movement(
+fn camera_mouse_movement(
     mut camera: Query<(&mut Transform, &Camera)>,
     mut mouse_movement_events: EventReader<MouseMovement>,
     size: Res<WindowSize>,
@@ -57,6 +57,16 @@ fn mouse_movement(
                 * aspect;
             camera_transform.y +=
                 mouse_movement.delta_y as f32 / size.height().get() as f32 * camera.vertical_height;
+        }
+    }
+}
+
+fn camera_zoom(mut camera: Query<&mut Camera>, mut mouse_scroll_events: EventReader<MouseScroll>) {
+    let mut camera = camera.get_single_mut().unwrap();
+    for mouse_scroll_event in mouse_scroll_events.iter() {
+        match mouse_scroll_event {
+            MouseScroll::Up => camera.vertical_height *= 0.9,
+            MouseScroll::Down => camera.vertical_height /= 0.9,
         }
     }
 }
