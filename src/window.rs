@@ -1,8 +1,9 @@
 use crate::renderer::RenderSchedule;
 use bevy::prelude::*;
+use enum_map::{Enum, EnumMap};
 use std::num::NonZeroUsize;
 use winit::{
-    event::{Event, WindowEvent},
+    event::{ElementState, Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
@@ -14,13 +15,69 @@ pub struct WindowSize {
 }
 
 impl WindowSize {
+    #[inline]
     pub fn width(&self) -> NonZeroUsize {
         self.width
     }
 
+    #[inline]
     pub fn height(&self) -> NonZeroUsize {
         self.height
     }
+}
+
+#[derive(Enum, Debug, Clone, Copy)]
+pub enum MouseButton {
+    Left,
+    Middle,
+    Right,
+}
+
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct MouseButtons {
+    buttons: EnumMap<MouseButton, bool>,
+    pressed_buttons: EnumMap<MouseButton, bool>,
+    released_buttons: EnumMap<MouseButton, bool>,
+}
+
+impl MouseButtons {
+    pub fn is_button_down(&self, button: MouseButton) -> bool {
+        self.buttons[button]
+    }
+
+    pub fn was_button_pressed(&self, button: MouseButton) -> bool {
+        self.pressed_buttons[button]
+    }
+
+    pub fn was_button_released(&self, button: MouseButton) -> bool {
+        self.released_buttons[button]
+    }
+}
+
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct MousePosition {
+    x: f64,
+    y: f64,
+}
+
+impl MousePosition {
+    #[inline]
+    pub fn x(&self) -> f64 {
+        self.x
+    }
+
+    #[inline]
+    pub fn y(&self) -> f64 {
+        self.y
+    }
+}
+
+#[derive(Event, Debug, Clone, Copy)]
+pub struct MouseMovement {
+    pub x: f64,
+    pub y: f64,
+    pub delta_x: f64,
+    pub delta_y: f64,
 }
 
 pub(crate) struct InitWindowInternals {
@@ -35,6 +92,7 @@ impl WindowPlugin {
         let InitWindowInternals { window, event_loop } =
             app.world.remove_non_send_resource().unwrap();
         window.set_visible(true);
+        let mut last_mouse_position: Option<winit::dpi::PhysicalPosition<f64>> = None;
         event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Poll;
             match event {
@@ -52,11 +110,70 @@ impl WindowPlugin {
                         WindowEvent::Destroyed | WindowEvent::CloseRequested => {
                             *control_flow = ControlFlow::Exit;
                         }
+                        WindowEvent::CursorLeft { device_id: _ } => {
+                            last_mouse_position = None;
+                        }
+                        WindowEvent::CursorMoved {
+                            device_id: _,
+                            position: mouse_position,
+                            ..
+                        } => {
+                            let (delta_x, delta_y) =
+                                last_mouse_position.map_or((0.0, 0.0), |last_mouse_position| {
+                                    (
+                                        mouse_position.x - last_mouse_position.x,
+                                        mouse_position.y - last_mouse_position.y,
+                                    )
+                                });
+                            app.world.send_event(MouseMovement {
+                                x: mouse_position.x,
+                                y: mouse_position.y,
+                                delta_x,
+                                delta_y,
+                            });
+                            *app.world.resource_mut::<MousePosition>() = MousePosition {
+                                x: mouse_position.x,
+                                y: mouse_position.y,
+                            };
+                            last_mouse_position = Some(mouse_position);
+                        }
+                        WindowEvent::MouseInput {
+                            device_id: _,
+                            state,
+                            button,
+                            ..
+                        } => {
+                            let mut mouse_buttons = app.world.resource_mut::<MouseButtons>();
+                            match button {
+                                winit::event::MouseButton::Left => {
+                                    mouse_buttons.buttons[MouseButton::Left] =
+                                        state == ElementState::Pressed;
+                                    mouse_buttons.pressed_buttons[MouseButton::Left] =
+                                        state == ElementState::Pressed;
+                                }
+                                winit::event::MouseButton::Right => {
+                                    mouse_buttons.buttons[MouseButton::Right] =
+                                        state == ElementState::Pressed;
+                                    mouse_buttons.pressed_buttons[MouseButton::Right] =
+                                        state == ElementState::Pressed;
+                                }
+                                winit::event::MouseButton::Middle => {
+                                    mouse_buttons.buttons[MouseButton::Middle] =
+                                        state == ElementState::Pressed;
+                                    mouse_buttons.pressed_buttons[MouseButton::Middle] =
+                                        state == ElementState::Pressed;
+                                }
+                                winit::event::MouseButton::Other(_) => {}
+                            }
+                        }
                         _ => {}
                     }
                 }
                 Event::MainEventsCleared => {
                     app.update();
+                    let mut mouse_buttons = app.world.resource_mut::<MouseButtons>();
+                    mouse_buttons.pressed_buttons = EnumMap::default();
+                    mouse_buttons.released_buttons = EnumMap::default();
                     window.request_redraw();
                 }
                 Event::RedrawRequested(window_id) if window_id == window.id() => {
@@ -82,6 +199,13 @@ impl Plugin for WindowPlugin {
                 width: NonZeroUsize::MIN,
                 height: NonZeroUsize::MIN,
             })
+            .insert_resource(MousePosition { x: 0.0, y: 0.0 })
+            .insert_resource(MouseButtons {
+                buttons: EnumMap::default(),
+                pressed_buttons: EnumMap::default(),
+                released_buttons: EnumMap::default(),
+            })
+            .add_event::<MouseMovement>()
             .set_runner(Self::runner);
     }
 }

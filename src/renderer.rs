@@ -1,6 +1,6 @@
 use crate::{
     window::{InitWindowInternals, WindowSize},
-    Material, Quad, {Camera, GlobalTransform},
+    Circle, Material, Quad, {Camera, GlobalTransform},
 };
 use bevy::{
     ecs::schedule::ScheduleLabel,
@@ -34,8 +34,24 @@ struct GpuQuad {
     blue: f32,
 }
 
+#[derive(ShaderType)]
+struct GpuCircle {
+    x: f32,
+    y: f32,
+    radius: f32,
+    red: f32,
+    green: f32,
+    blue: f32,
+}
+
 #[derive(Resource)]
 struct Renderer {
+    circle_render_pipeline: wgpu::RenderPipeline,
+    circle_buffer: wgpu::Buffer,
+    circle_buffer_size: wgpu::BufferAddress,
+    circle_count: u32,
+    circle_bind_group_layout: wgpu::BindGroupLayout,
+    circle_bind_group: wgpu::BindGroup,
     quad_render_pipeline: wgpu::RenderPipeline,
     quad_buffer: wgpu::Buffer,
     quad_buffer_size: wgpu::BufferAddress,
@@ -211,7 +227,84 @@ impl Plugin for RendererPlugin {
             multiview: None,
         });
 
+        let circle_buffer_size = GpuCircle::SHADER_SIZE;
+        let circle_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Circle Storage Buffer"),
+            size: circle_buffer_size.get(),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let circle_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Circle Bind Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(circle_buffer_size),
+                    },
+                    count: None,
+                }],
+            });
+        let circle_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Circle Bind Group"),
+            layout: &circle_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: circle_buffer.as_entire_binding(),
+            }],
+        });
+
+        let circle_shader = device.create_shader_module(include_wgsl!("./circle_shader.wgsl"));
+
+        let circle_render_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Circle Render Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout, &circle_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+        let circle_render_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Circle Render Pipeline"),
+                layout: Some(&circle_render_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &circle_shader,
+                    entry_point: "vertex",
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Cw,
+                    cull_mode: None,
+                    unclipped_depth: false,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &circle_shader,
+                    entry_point: "pixel",
+                    targets: &[Some(surface_configuration.format.into())],
+                }),
+                multiview: None,
+            });
+
         app.insert_resource(Renderer {
+            circle_render_pipeline,
+            circle_buffer,
+            circle_buffer_size: circle_buffer_size.get(),
+            circle_count: 0,
+            circle_bind_group,
+            circle_bind_group_layout,
             quad_render_pipeline,
             quad_buffer,
             quad_buffer_size: quad_buffer_size.get(),
@@ -235,6 +328,7 @@ impl Plugin for RendererPlugin {
                     on_resize.run_if(resource_changed::<WindowSize>()),
                     update_camera,
                     update_quads,
+                    update_circles,
                 ),
                 render,
             )
@@ -341,6 +435,68 @@ fn update_quads(
     }
 }
 
+// TODO: find a way to only upload changed circles
+fn update_circles(
+    mut renderer: ResMut<Renderer>,
+    circles: Query<(Ref<GlobalTransform>, Ref<Circle>, Option<Ref<Material>>)>,
+) {
+    let mut anything_changed = false;
+    let mut circle_count = 0usize;
+    let mut buffer = DynamicStorageBuffer::new(vec![]);
+    for (global_transform, circle, material) in &circles {
+        circle_count += 1;
+        anything_changed |= global_transform.is_changed() || circle.is_changed();
+        let transform = global_transform.transform();
+        let (red, green, blue) = material.map_or((1.0, 1.0, 1.0), |material| {
+            anything_changed |= material.is_changed();
+            let Material { red, green, blue } = *material;
+            (red, green, blue)
+        });
+        buffer
+            .write(&GpuCircle {
+                x: transform.x,
+                y: transform.y,
+                radius: circle.radius,
+                red,
+                green,
+                blue,
+            })
+            .unwrap();
+    }
+
+    let circle_count = circle_count.try_into().unwrap();
+    if anything_changed || circle_count != renderer.circle_count {
+        renderer.circle_count = circle_count;
+        let buffer = buffer.into_inner();
+
+        let required_buffer_size: wgpu::BufferAddress = buffer.len().try_into().unwrap();
+        if required_buffer_size > renderer.circle_buffer_size {
+            renderer.circle_buffer_size = required_buffer_size;
+            renderer.circle_buffer = renderer.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Circle Storage Buffer"),
+                size: renderer.circle_buffer_size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            });
+            renderer.circle_bind_group =
+                renderer
+                    .device
+                    .create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Circle Bind Group"),
+                        layout: &renderer.circle_bind_group_layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: renderer.circle_buffer.as_entire_binding(),
+                        }],
+                    });
+        }
+
+        renderer
+            .queue
+            .write_buffer(&renderer.circle_buffer, 0, &buffer);
+    }
+}
+
 fn render(renderer: ResMut<Renderer>) {
     let output = loop {
         match renderer.surface.get_current_texture() {
@@ -388,6 +544,10 @@ fn render(renderer: ResMut<Renderer>) {
         render_pass.set_bind_group(0, &renderer.camera_bind_group, &[]);
         render_pass.set_bind_group(1, &renderer.quad_bind_group, &[]);
         render_pass.draw(0..4, 0..renderer.quad_count);
+
+        render_pass.set_pipeline(&renderer.circle_render_pipeline);
+        render_pass.set_bind_group(1, &renderer.circle_bind_group, &[]);
+        render_pass.draw(0..4, 0..renderer.circle_count);
     }
     renderer.queue.submit([encoder.finish()]);
 
