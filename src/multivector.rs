@@ -87,7 +87,7 @@ impl Sub<Zero> for T {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GenericMultiVector<S, E0, E1, E2, E01, E02, E12, E012>
 where
     S: Value,
@@ -376,14 +376,14 @@ type MO<A, B> = <A as Mul<B>>::Output;
 impl<A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P> Mul<GenericMultiVector<I, J, K, L, M, N, O, P>>
     for GenericMultiVector<A, B, C, D, E, F, G, H>
 where
-    A: Value + Mul<I> + Mul<J> + Mul<K> + Mul<L>,
-    B: Value + Mul<I>,
-    C: Value + Mul<K> + Mul<M> + Mul<I> + Mul<O>,
-    D: Value + Mul<L> + Mul<N> + Mul<O> + Mul<I>,
-    E: Value + Mul<K> + Mul<O>,
-    F: Value + Mul<L>,
-    G: Value + Mul<O> + Mul<P> + Mul<L> + Mul<N> + Mul<K>,
-    H: Value + Mul<O>,
+    A: Value + Mul<I> + Mul<J> + Mul<K> + Mul<L> + Mul<M> + Mul<N> + Mul<O> + Mul<P>,
+    B: Value + Mul<I> + Mul<K> + Mul<L> + Mul<P>,
+    C: Value + Mul<K> + Mul<M> + Mul<I> + Mul<O> + Mul<J> + Mul<P> + Mul<L> + Mul<N>,
+    D: Value + Mul<L> + Mul<N> + Mul<O> + Mul<I> + Mul<P> + Mul<J> + Mul<K> + Mul<M>,
+    E: Value + Mul<K> + Mul<O> + Mul<I> + Mul<L>,
+    F: Value + Mul<L> + Mul<O> + Mul<I> + Mul<K>,
+    G: Value + Mul<O> + Mul<P> + Mul<L> + Mul<N> + Mul<K> + Mul<M> + Mul<I> + Mul<J>,
+    H: Value + Mul<O> + Mul<L> + Mul<K> + Mul<I>,
     I: Value,
     J: Value,
     K: Value,
@@ -396,31 +396,66 @@ where
     MO<A, J>: Add<MO<B, I>>,
     MO<A, K>: Add<MO<C, I>>,
     MO<A, L>: Add<MO<D, I>>,
+    MO<A, M>: Add<MO<B, K>>,
+    MO<A, N>: Add<MO<B, L>>,
+    MO<A, O>: Add<MO<C, L>>,
+    MO<A, P>: Add<MO<B, P>>,
     AO<MO<A, I>, MO<C, K>>: Add<MO<D, L>>,
     AO<MO<A, J>, MO<B, I>>: Sub<MO<C, M>>,
     AO<MO<A, K>, MO<C, I>>: Sub<MO<D, O>>,
     AO<MO<A, L>, MO<D, I>>: Add<MO<C, O>>,
+    AO<MO<A, M>, MO<B, K>>: Sub<MO<C, J>>,
+    AO<MO<A, N>, MO<B, L>>: Sub<MO<D, J>>,
+    AO<MO<A, O>, MO<C, L>>: Sub<MO<D, K>>,
+    AO<MO<A, P>, MO<B, P>>: Sub<MO<C, N>>,
     AO<AO<MO<A, I>, MO<C, K>>, MO<D, L>>: Sub<MO<G, O>>,
     SO<AO<MO<A, J>, MO<B, I>>, MO<C, M>>: Sub<MO<D, N>>,
     SO<AO<MO<A, K>, MO<C, I>>, MO<D, O>>: Add<MO<G, L>>,
     AO<AO<MO<A, L>, MO<D, I>>, MO<C, O>>: Add<MO<D, I>>,
+    SO<AO<MO<A, M>, MO<B, K>>, MO<C, J>>: Add<MO<D, P>>,
+    SO<AO<MO<A, N>, MO<B, L>>, MO<D, J>>: Sub<MO<C, P>>,
+    SO<AO<MO<A, O>, MO<C, L>>, MO<D, K>>: Add<MO<G, I>>,
+    SO<AO<MO<A, P>, MO<B, P>>, MO<C, N>>: Add<MO<D, M>>,
     SO<AO<AO<MO<A, I>, MO<C, K>>, MO<D, L>>, MO<G, O>>: Value,
     SO<SO<AO<MO<A, J>, MO<B, I>>, MO<C, M>>, MO<D, N>>: Add<MO<E, K>>,
     AO<SO<AO<MO<A, K>, MO<C, I>>, MO<D, O>>, MO<G, L>>: Add<MO<G, N>>,
     AO<AO<AO<MO<A, L>, MO<D, I>>, MO<C, O>>, MO<D, I>>: Add<MO<E, O>>,
+    AO<SO<AO<MO<A, M>, MO<B, K>>, MO<C, J>>, MO<D, P>>: Add<MO<E, I>>,
+    SO<SO<AO<MO<A, N>, MO<B, L>>, MO<D, J>>, MO<C, P>>: Add<MO<F, I>>,
+    AO<SO<AO<MO<A, O>, MO<C, L>>, MO<D, K>>, MO<G, I>>: Value,
+    AO<SO<AO<MO<A, P>, MO<B, P>>, MO<C, N>>, MO<D, M>>: Add<MO<E, L>>,
     AO<SO<SO<AO<MO<A, J>, MO<B, I>>, MO<C, M>>, MO<D, N>>, MO<E, K>>: Add<MO<F, L>>,
     AO<AO<SO<AO<MO<A, K>, MO<C, I>>, MO<D, O>>, MO<G, L>>, MO<G, N>>: Value,
     AO<AO<AO<AO<MO<A, L>, MO<D, I>>, MO<C, O>>, MO<D, I>>, MO<E, O>>: Sub<MO<G, K>>,
+    AO<AO<SO<AO<MO<A, M>, MO<B, K>>, MO<C, J>>, MO<D, P>>, MO<E, I>>: Sub<MO<F, O>>,
+    AO<SO<SO<AO<MO<A, N>, MO<B, L>>, MO<D, J>>, MO<C, P>>, MO<F, I>>: Sub<MO<G, M>>,
+    AO<AO<SO<AO<MO<A, P>, MO<B, P>>, MO<C, N>>, MO<D, M>>, MO<E, L>>: Sub<MO<F, K>>,
     AO<AO<SO<SO<AO<MO<A, J>, MO<B, I>>, MO<C, M>>, MO<D, N>>, MO<E, K>>, MO<F, L>>: Add<MO<G, P>>,
     SO<AO<AO<AO<AO<MO<A, L>, MO<D, I>>, MO<C, O>>, MO<D, I>>, MO<E, O>>, MO<G, K>>: Value,
+    SO<AO<SO<SO<AO<MO<A, N>, MO<B, L>>, MO<D, J>>, MO<C, P>>, MO<F, I>>, MO<G, M>>: Sub<MO<H, K>>,
+    SO<AO<AO<SO<AO<MO<A, M>, MO<B, K>>, MO<C, J>>, MO<D, P>>, MO<E, I>>, MO<F, O>>: Add<MO<H, L>>,
+    SO<AO<AO<SO<AO<MO<A, P>, MO<B, P>>, MO<C, N>>, MO<D, M>>, MO<E, L>>, MO<F, K>>: Add<MO<G, J>>,
     AO<AO<AO<SO<SO<AO<MO<A, J>, MO<B, I>>, MO<C, M>>, MO<D, N>>, MO<E, K>>, MO<F, L>>, MO<G, P>>:
         Add<MO<H, O>>,
+    AO<SO<AO<AO<SO<AO<MO<A, M>, MO<B, K>>, MO<C, J>>, MO<D, P>>, MO<E, I>>, MO<F, O>>, MO<H, L>>:
+        Value,
+    SO<SO<AO<SO<SO<AO<MO<A, N>, MO<B, L>>, MO<D, J>>, MO<C, P>>, MO<F, I>>, MO<G, M>>, MO<H, K>>:
+        Value,
+    AO<SO<AO<AO<SO<AO<MO<A, P>, MO<B, P>>, MO<C, N>>, MO<D, M>>, MO<E, L>>, MO<F, K>>, MO<G, J>>:
+        Add<MO<H, I>>,
     AO<
         AO<
             AO<AO<SO<SO<AO<MO<A, J>, MO<B, I>>, MO<C, M>>, MO<D, N>>, MO<E, K>>, MO<F, L>>,
             MO<G, P>,
         >,
         MO<H, O>,
+    >: Value,
+    AO<
+        AO<
+            SO<AO<AO<SO<AO<MO<A, P>, MO<B, P>>, MO<C, N>>, MO<D, M>>, MO<E, L>>, MO<F, K>>,
+            MO<G, J>,
+        >,
+        MO<H, I>,
     >: Value,
 {
     type Output = GenericMultiVector<
@@ -434,12 +469,25 @@ where
         >,
         AO<AO<SO<AO<MO<A, K>, MO<C, I>>, MO<D, O>>, MO<G, L>>, MO<G, N>>,
         SO<AO<AO<AO<AO<MO<A, L>, MO<D, I>>, MO<C, O>>, MO<D, I>>, MO<E, O>>, MO<G, K>>,
-        Zero,
-        Zero,
-        Zero,
-        Zero,
+        AO<
+            SO<AO<AO<SO<AO<MO<A, M>, MO<B, K>>, MO<C, J>>, MO<D, P>>, MO<E, I>>, MO<F, O>>,
+            MO<H, L>,
+        >,
+        SO<
+            SO<AO<SO<SO<AO<MO<A, N>, MO<B, L>>, MO<D, J>>, MO<C, P>>, MO<F, I>>, MO<G, M>>,
+            MO<H, K>,
+        >,
+        AO<SO<AO<MO<A, O>, MO<C, L>>, MO<D, K>>, MO<G, I>>,
+        AO<
+            AO<
+                SO<AO<AO<SO<AO<MO<A, P>, MO<B, P>>, MO<C, N>>, MO<D, M>>, MO<E, L>>, MO<F, K>>,
+                MO<G, J>,
+            >,
+            MO<H, I>,
+        >,
     >;
 
+    #[inline]
     fn mul(self, rhs: GenericMultiVector<I, J, K, L, M, N, O, P>) -> Self::Output {
         let a = self.s;
         let b = self.e0;
@@ -462,10 +510,48 @@ where
             e0: a * j + b * i - c * m - d * n + e * k + f * l + g * p + h * o,
             e1: a * k + c * i - d * o + g * l + g * n,
             e2: a * l + d * i + c * o + d * i + e * o - g * k,
-            e01: Zero,
-            e02: Zero,
-            e12: Zero,
-            e012: Zero,
+            e01: a * m + b * k - c * j + d * p + e * i - f * o + h * l,
+            e02: a * n + b * l - d * j - c * p + f * i - g * m - h * k,
+            e12: a * o + c * l - d * k + g * i,
+            e012: a * p + b * p - c * n + d * m + e * l - f * k + g * j + h * i,
         }
     }
+}
+
+#[test]
+fn test() {
+    let a = MultiVector {
+        s: 2.0,
+        e0: 3.0,
+        e1: 5.0,
+        e2: 7.0,
+        e01: 11.0,
+        e02: 13.0,
+        e12: 17.0,
+        e012: 19.0,
+    };
+    let b = MultiVector {
+        s: 23.0,
+        e0: 29.0,
+        e1: 31.0,
+        e2: 37.0,
+        e01: 41.0,
+        e02: 43.0,
+        e12: 47.0,
+        e012: 53.0,
+    };
+    assert_eq!(
+        a * b,
+        MultiVector {
+            // -339, -1351, 477, -57, 1477, -741, 453, 1253
+            s: -339.0,
+            e0: -1351.0,
+            e1: 477.0,
+            e2: -57.0,
+            e01: 1477.0,
+            e02: -741.0,
+            e12: 453.0,
+            e012: 1253.0
+        }
+    );
 }
